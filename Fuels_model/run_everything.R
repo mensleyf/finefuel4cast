@@ -2,6 +2,7 @@
 
 # ----------------------- packages----------------------
 
+
 if (!require("pacman")) install.packages("pacman"); library(pacman)
 p_load(rstan,dplyr,tidyr,shinystan,here,rstudioapi,readtext,  install = TRUE, update = getOption("pac_update"), character.only = FALSE)
 
@@ -30,7 +31,7 @@ file.show("stan_txts/fuels_model_code_annotated.txt")
 
 # our favorite way to check a model
 fit1<-readRDS( "model_outputs/fuels_model.rds")
-shinystan::launch_shinystan(fit1)
+#shinystan::launch_shinystan(fit1)
 
 #traceplots and rhat scores: makes traceplots and prints rhat scores
 source(file= "model_checking_and_validation/convergeance_check.R")
@@ -50,7 +51,7 @@ gc()
 #prior posterior plots
 source(file= "model_checking_and_validation/prior_posterior_plots.R")
 # look
-# browseURL("Figures/posterior_distributions.png")
+browseURL("Figures/posterior_distributions.png")
 gc()
 
 # coverage:

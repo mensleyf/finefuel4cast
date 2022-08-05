@@ -38,7 +38,8 @@ stan.data.real<-list("nLocs"=meta_dat$nLocs, "nYears"=meta_dat$nYears, "nMiss"=m
                      "P0"=meta_dat$P0,"P"=meta_dat$prod_data_vec,"first_val_vec"=as.data.frame(meta_dat$first_val_vec), "S"=sample_data,
                      "fuel_obs_index"=as.data.frame(meta_dat$fuels_obs_index), "prod_index"=as.data.frame(meta_dat$prod_index), "O"=fuel_data_z2)
                      
-fit1<-stan(model_code=code,data=stan.data.real,control=list(adapt_delta=.8, max_treedepth=10),warmup=10000,iter=20000, chains=4, save_warmup=F)
+#fit1<-stan(model_code=code,data=stan.data.real,control=list(adapt_delta=.8, max_treedepth=10),warmup=10000,iter=20000, chains=4, save_warmup=F)
+fit1<-stan(model_code=code,data=stan.data.real,control=list(adapt_delta=.8, max_treedepth=10),warmup=5000,iter=10000, chains=4, save_warmup=F)
 
 saveRDS(fit1, "model_outputs/fuels_model_ppc.rds")
 print(paste0("divergent iterations: " , sum(get_divergent_iterations(fit1))))

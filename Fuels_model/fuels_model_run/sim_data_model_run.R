@@ -94,6 +94,9 @@ print(summary(fit1)[[1]][seq(1,5,1),c(1,10)])
 
 # ----------------------- check visually ----------------------
 
+## work with saved model output
+#fit1 <- readRDS("model_outputs/sim_fuels_model.rds")
+
 alphaout<-rstan::extract(fit1, 'alpha', permuted=F);alphaout<-apply(alphaout, 3,c)
 betaout<-rstan::extract(fit1, 'beta', permuted=F);betaout<-apply(betaout, 3,c)
 sig_oout<-rstan::extract(fit1, 'sig_o', permuted=F);sig_oout<-apply(sig_oout, 3,c)
@@ -116,15 +119,16 @@ sig_p_025<-quantile(sig_pout,  0.025)
 sig_p<-quantile(sig_pout,  0.5)
 
 
-png("Supplemental_Info_figs/simulation_retrieval.png")
+png("Supplemental_Info_figs/simulation_retrieval.png",height=4,width=5,units="in",res=400)
 
-plotCI(x=alpha_sim, y=alpha,li=alpha_025, ui=alpha_975, xlim=c(0,3.1), ylim=c(0,3.1), col="red", lwd=3, pch=15,
-       main="Parameter Retrieval Simulation", ylab="Fuels Model parameter 95% CI estimate", xlab="known parameter values")
+par(tcl=-0.2,mgp=c(2,0.5,0),mar=c(3,4,1,1))
+plotCI(x=alpha_sim, y=alpha,li=alpha_025, ui=alpha_975, xlim=c(0,1), ylim=c(0,1), col="red", lwd=3, pch=15,
+        ylab="Estimated values", xlab="Known parameter values")
 plotCI(x=beta_sim, y=beta, li=beta_025, ui=beta_975, xlim=c(0,1), ylim=c(0,1), col="blue", lwd=3, pch=15, add=T)
 plotCI(x=sig_o_sim, y=sig_o, li=sig_o_025, ui=sig_o_975, xlim=c(0,1), ylim=c(0,1), col="darkgreen", lwd=3, pch=15, add=T)
 plotCI(x=sig_p_sim, y=sig_p, li=sig_p_025, ui=sig_p_975, xlim=c(0,1), ylim=c(0,1), col="purple", lwd=3, pch=15, add=T)
 abline(0,1)
-legend("bottomright", legend=c("carryover (a)", "conversion (b)", "process err (sig_p)","obs err (sig_o)"),
-       pch=19, col=c("red", "blue", "purple" ,"darkgreen"))
+legend("topleft", legend=str2expression(c("alpha", "beta", "sigma[p]","sigma[o]")),
+       pch=19, col=c("red", "blue", "purple" ,"darkgreen"),bty="n")
 
 dev.off()

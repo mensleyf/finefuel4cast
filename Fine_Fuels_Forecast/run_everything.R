@@ -1,4 +1,4 @@
-# ----------------------- packges, fncs----------------------
+# ----------------------- packages, fncs----------------------
 
 if (!require("pacman")) install.packages("pacman"); library(pacman)
 p_load(rstan,dplyr,tidyr,shinystan,here,rstudioapi,readtext,  install = TRUE, update = getOption("pac_update"), character.only = FALSE)
@@ -10,10 +10,10 @@ current_folder <- dirname(getActiveDocumentContext()$path)
 setwd(current_folder)
 setwd("..")
 
-
 source(file = "Fine_Fuels_Forecast/assigning_districts.R")
 
-#run 10 years of spin up on real data, runs 11th year on forecasted or hindcasted data, save outputs
+# Run 10 years of spin up using observed productivity, 
+# predict 11th year using leave-one-year-out productivity predictions, save outputs
 source(file = "Fine_Fuels_Forecast/predict_latent_fine_fuel.R")
 
 # make spatial map for latent fine fuels of 2021

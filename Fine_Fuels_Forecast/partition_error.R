@@ -1,28 +1,34 @@
 #---------- loading pcks, data, model-------------
 
-if (!require("pacman")) install.packages("pacman"); library(pacman)
-p_load(rstan,dplyr,tidyr,shinystan,here,rstudioapi,readtext, plotrix,RColorBrewer,rgdal, raster, install = TRUE, update = getOption("pac_update"), character.only = FALSE)
+if(!require("pacman")) install.packages("pacman"); library(pacman)
+p_load(rstan,data.table,dplyr,tidyr,shinystan,here,rstudioapi,readtext, plotrix,RColorBrewer,rgdal, raster, install = TRUE, update = getOption("pac_update"), character.only = FALSE)
 
 ##--------- extracting information from Prod_Forecast model ------------------
 
-#fitted model
-forecast_rds<-readRDS( "Prod_Forecast_model/prod_model_outputs/march_forecast_lm.rds")
-forecast_mod<-forecast_rds$mod_fit
-proc_err<-summary(forecast_mod)$sigma
+#import fitted model and productivity data, preditions
+forecast_rds<-readRDS( "Prod_Forecast_model/prod_model_outputs/march_forecast.rds")
+proc_err<-summary(forecast_rds$mod_fit)$sigma
+
+# select random locations
+num_locs<-400
+keep<- sample(1:nrow(forecast_rds$coord_df),num_locs)
 
 #actual prod data from 1987-2020
 prod_data<-as.data.frame(forecast_rds$agb_m)
 names(prod_data)<-seq(1987,2020)
+prod_data <- prod_data[keep,]
 
 #forecasted/hindcasted data 1988-2021
-prod_preds<-read.csv("Prod_Forecast_model/prod_model_outputs/forecast2021/prod_cast_1988_2021.csv")
+prod_preds<-as.data.frame(forecast_rds$prod_mean)
+names(prod_preds)<-seq(1987,2020)
+prod_preds <- prod_preds[keep,]
 
-(nLocs<-nrow(prod_preds))
+nLocs<-nrow(prod_preds)
 
 # param uncertainty from monte carlo sampling 
-march_forecast_param<-read.csv("Prod_Forecast_model/prod_model_outputs/forecast2021/march_forecast_param_2021.csv")
-(param_err<-mean(apply(march_forecast_param,2,sd), na.rm=T))
-
+march_forecast_param <- fread(file="Prod_Forecast_model/prod_model_outputs/forecast2021/march_forecast_param_2021.csv",header=T)
+march_forecast_param <- as.data.frame(march_forecast_param)
+param_err<-mean(apply(march_forecast_param,1,sd), na.rm=T) 
 
 # -------------- extracting information from Fuels Model ----------------
 
@@ -43,20 +49,7 @@ sig_pout<-rstan::extract(fit1, 'sig_p', permuted=F);sig_pout<-apply(sig_pout, 3,
 sig_p_est<-mean(matrix(apply(sig_pout,2,mean)))
 
 
-#lets not do this 50000 times
-loc_keeps<-read.csv("Prod_Forecast_model/prod_model_outputs/loc_keeps.csv")
 
-
-coords<-as.data.frame(loc_keeps)
-coords<-subset(coords, coords$yr==1987)
-(nLocs<-nrow(coords))
-
-num_locs<-100
-random_locs<-sample(seq(1:nrow(coords)), num_locs)
-loc_keeps<-loc_keeps[random_locs,]
-agb_m<-as.data.frame(forecast_rds$agb_m)[random_locs,]
-names(agb_m)<-seq(1987,2020)
-dim(agb_m)
 
 
 # #forecasted prod data
@@ -73,7 +66,7 @@ dim(agb_m)
 
 ##------------------- spin up ------------------------
 
-#matrix to holdcurrent year spin-up
+#matrix to hold current year spin-up
 
 #all/none
 Fspin_all<-matrix(NA,nrow=num_locs,ncol=11)
@@ -95,25 +88,25 @@ Fspin_prod_mod_par_fuels_mod_proc<-matrix(NA,nrow=num_locs,ncol=11)
 
 
 #set first val to prod 2010
-Fspin_all[,1]<-agb_m[,24]
-Fspin_none[,1]<-agb_m[,24]
+Fspin_all[,1]<-prod_data$'2010'
+Fspin_none[,1]<-prod_data$'2010'
 
 #1way
-Fspin_prod_mod_proc[,1]<-agb_m[,24]
-Fspin_prod_mod_par[,1]<-agb_m[,24]
-Fspin_fuels_mod_proc[,1]<-agb_m[,24]
-Fspin_fuels_mod_par[,1]<-agb_m[,24]
+Fspin_prod_mod_proc[,1]<-prod_data$'2010'
+Fspin_prod_mod_par[,1]<-prod_data$'2010'
+Fspin_fuels_mod_proc[,1]<-prod_data$'2010'
+Fspin_fuels_mod_par[,1]<-prod_data$'2010'
 
 #2way
-Fspin_prod_mod[,1]<-agb_m[,24]
-Fspin_fuels_mod[,1]<-agb_m[,24]
-Fspin_prod_mod_proc_fuels_mod_proc[,1]<-agb_m[,24]
-Fspin_prod_mod_proc_fuels_mod_par[,1]<-agb_m[,24]
-Fspin_prod_mod_par_fuels_mod_par[,1]<-agb_m[,24]
-Fspin_prod_mod_par_fuels_mod_proc[,1]<-agb_m[,24]
+Fspin_prod_mod[,1]<-prod_data$'2010'
+Fspin_fuels_mod[,1]<-prod_data$'2010'
+Fspin_prod_mod_proc_fuels_mod_proc[,1]<-prod_data$'2010'
+Fspin_prod_mod_proc_fuels_mod_par[,1]<-prod_data$'2010'
+Fspin_prod_mod_par_fuels_mod_par[,1]<-prod_data$'2010'
+Fspin_prod_mod_par_fuels_mod_proc[,1]<-prod_data$'2010'
 
 #random iterations (out of 8000) to spin over
-nIters<-100 #(hitting memory limits) (could start in 2010?)
+nIters<-500 #(hitting memory limits) (could start in 2010?)
 random_iters<-sample(1:length(betaout),nIters)
 
 #all/none
@@ -134,31 +127,31 @@ Fspin_iters_prod_mod_proc_fuels_mod_par<-matrix(NA,nrow=num_locs*11,ncol=nIters)
 Fspin_iters_prod_mod_par_fuels_mod_par<-matrix(NA,nrow=num_locs*11,ncol=nIters)
 Fspin_iters_prod_mod_par_fuels_mod_proc<-matrix(NA,nrow=num_locs*11,ncol=nIters)
 
-
+# loop over random locations and years
 for (i in 1:nIters){
   for ( cur_yr in 2:11){
     if(cur_yr!=11){ #thru 2020 on real data
-      (iter<-random_iters[i])
+      iter<-random_iters[i]
       prev_yr<-cur_yr-1
       yr_name<-2010+cur_yr
       
       #all and none 
-      Fspin_all[,cur_yr]<-alphaout[iter]*Fspin_all[,prev_yr]+betaout[iter]*agb_m[,cur_yr] + rnorm(num_locs,0,sig_pout[iter])
-      Fspin_none[,cur_yr]<-alpha_est*Fspin_none[,prev_yr]+beta_est*agb_m[,cur_yr]
+      Fspin_all[,cur_yr]<-alphaout[iter]*Fspin_all[,prev_yr]+betaout[iter]*prod_data[,cur_yr] + rnorm(num_locs,0,sig_pout[iter])
+      Fspin_none[,cur_yr]<-alpha_est*Fspin_none[,prev_yr]+beta_est*prod_data[,cur_yr]
       
       #1way
-      Fspin_prod_mod_proc[,cur_yr]<-alpha_est*Fspin_prod_mod_proc[,prev_yr]+beta_est*agb_m[,cur_yr]
-      Fspin_prod_mod_par[,cur_yr]<-alpha_est*Fspin_prod_mod_par[,prev_yr]+beta_est*agb_m[,cur_yr]
-      Fspin_fuels_mod_proc[,cur_yr]<-alpha_est*Fspin_fuels_mod_proc[,prev_yr]+beta_est*agb_m[,cur_yr] + rnorm(num_locs,0,sig_pout[iter])
-      Fspin_fuels_mod_par[,cur_yr]<-alphaout[iter]*Fspin_fuels_mod_par[,prev_yr]+betaout[iter]*agb_m[,cur_yr]
+      Fspin_prod_mod_proc[,cur_yr]<-alpha_est*Fspin_prod_mod_proc[,prev_yr]+beta_est*prod_data[,cur_yr]
+      Fspin_prod_mod_par[,cur_yr]<-alpha_est*Fspin_prod_mod_par[,prev_yr]+beta_est*prod_data[,cur_yr]
+      Fspin_fuels_mod_proc[,cur_yr]<-alpha_est*Fspin_fuels_mod_proc[,prev_yr]+beta_est*prod_data[,cur_yr] + rnorm(num_locs,0,sig_pout[iter])
+      Fspin_fuels_mod_par[,cur_yr]<-alphaout[iter]*Fspin_fuels_mod_par[,prev_yr]+betaout[iter]*prod_data[,cur_yr]
       
       #2way
-      Fspin_prod_mod[,cur_yr]<-alpha_est*Fspin_prod_mod[,prev_yr]+beta_est*agb_m[,cur_yr]
-      Fspin_fuels_mod[,cur_yr]<-alphaout[iter]*Fspin_fuels_mod[,prev_yr]+betaout[iter]*agb_m[,cur_yr] + rnorm(num_locs,0,sig_pout[iter])
-      Fspin_prod_mod_proc_fuels_mod_proc[,cur_yr]<-alpha_est*Fspin_prod_mod_proc_fuels_mod_proc[,prev_yr]+beta_est*agb_m[,cur_yr] + rnorm(num_locs,0,sig_pout[iter])
-      Fspin_prod_mod_proc_fuels_mod_par[,cur_yr]<-alphaout[iter]*Fspin_prod_mod_proc_fuels_mod_par[,prev_yr]+betaout[iter]*agb_m[,cur_yr]
-      Fspin_prod_mod_par_fuels_mod_par[,cur_yr]<-alphaout[iter]*Fspin_prod_mod_par_fuels_mod_par[,prev_yr]+betaout[iter]*agb_m[,cur_yr] 
-      Fspin_prod_mod_par_fuels_mod_proc[,cur_yr]<-alpha_est*Fspin_prod_mod_par_fuels_mod_proc[,prev_yr]+beta_est*agb_m[,cur_yr] + rnorm(num_locs,0,sig_pout[iter])
+      Fspin_prod_mod[,cur_yr]<-alpha_est*Fspin_prod_mod[,prev_yr]+beta_est*prod_data[,cur_yr]
+      Fspin_fuels_mod[,cur_yr]<-alphaout[iter]*Fspin_fuels_mod[,prev_yr]+betaout[iter]*prod_data[,cur_yr] + rnorm(num_locs,0,sig_pout[iter])
+      Fspin_prod_mod_proc_fuels_mod_proc[,cur_yr]<-alpha_est*Fspin_prod_mod_proc_fuels_mod_proc[,prev_yr]+beta_est*prod_data[,cur_yr] + rnorm(num_locs,0,sig_pout[iter])
+      Fspin_prod_mod_proc_fuels_mod_par[,cur_yr]<-alphaout[iter]*Fspin_prod_mod_proc_fuels_mod_par[,prev_yr]+betaout[iter]*prod_data[,cur_yr]
+      Fspin_prod_mod_par_fuels_mod_par[,cur_yr]<-alphaout[iter]*Fspin_prod_mod_par_fuels_mod_par[,prev_yr]+betaout[iter]*prod_data[,cur_yr] 
+      Fspin_prod_mod_par_fuels_mod_proc[,cur_yr]<-alpha_est*Fspin_prod_mod_par_fuels_mod_proc[,prev_yr]+beta_est*prod_data[,cur_yr] + rnorm(num_locs,0,sig_pout[iter])
       
     }
     if(cur_yr==11){ #last year on forecasted data
@@ -167,22 +160,22 @@ for (i in 1:nIters){
       yr_name<-1986+cur_yr
       
       #all/none
-      Fspin_all[,cur_yr]<-alphaout[iter]*Fspin_all[,prev_yr]+betaout[iter]*(prod_preds[random_locs,34]+ rnorm(num_locs,0,param_err)+rnorm(num_locs, 0, proc_err)) + rnorm(num_locs,0,sig_pout[iter])
-      Fspin_none[,cur_yr]<-alpha_est*Fspin_none[,prev_yr]+beta_est*prod_preds[random_locs,34]
+      Fspin_all[,cur_yr]<-alphaout[iter]*Fspin_all[,prev_yr]+betaout[iter]*(prod_preds[,34]+ rnorm(num_locs,0,param_err)+rnorm(num_locs, 0, proc_err)) + rnorm(num_locs,0,sig_pout[iter])
+      Fspin_none[,cur_yr]<-alpha_est*Fspin_none[,prev_yr]+beta_est*prod_preds[,34]
       
       #1way
-      Fspin_prod_mod_proc[,cur_yr]<-alpha_est*Fspin_prod_mod_proc[,prev_yr]+beta_est*(prod_preds[random_locs,34]+ rnorm(num_locs,0,proc_err))
-      Fspin_prod_mod_par[,cur_yr]<-alpha_est*Fspin_prod_mod_par[,prev_yr]+beta_est*(prod_preds[random_locs,34]+ rnorm(num_locs,0,param_err))
-      Fspin_fuels_mod_proc[,cur_yr]<-alpha_est*Fspin_fuels_mod_proc[,prev_yr]+beta_est*prod_preds[random_locs,34] + rnorm(num_locs,0,sig_pout[iter])
-      Fspin_fuels_mod_par[,cur_yr]<-alphaout[iter]*Fspin_fuels_mod_par[,prev_yr]+betaout[iter]*prod_preds[random_locs,34]
+      Fspin_prod_mod_proc[,cur_yr]<-alpha_est*Fspin_prod_mod_proc[,prev_yr]+beta_est*(prod_preds[,34]+ rnorm(num_locs,0,proc_err))
+      Fspin_prod_mod_par[,cur_yr]<-alpha_est*Fspin_prod_mod_par[,prev_yr]+beta_est*(prod_preds[,34]+ rnorm(num_locs,0,param_err))
+      Fspin_fuels_mod_proc[,cur_yr]<-alpha_est*Fspin_fuels_mod_proc[,prev_yr]+beta_est*prod_preds[,34] + rnorm(num_locs,0,sig_pout[iter])
+      Fspin_fuels_mod_par[,cur_yr]<-alphaout[iter]*Fspin_fuels_mod_par[,prev_yr]+betaout[iter]*prod_preds[,34]
       
       #2way
-      Fspin_prod_mod[,cur_yr]<-alpha_est*Fspin_prod_mod[,prev_yr]+beta_est*(prod_preds[random_locs,34]+ rnorm(num_locs,0,proc_err) +rnorm(num_locs,0,param_err))
-      Fspin_fuels_mod[,cur_yr]<-alphaout[iter]*Fspin_fuels_mod[,prev_yr]+betaout[iter]*prod_preds[random_locs,34]  + rnorm(num_locs,0,sig_pout[iter])
-      Fspin_prod_mod_proc_fuels_mod_proc[,cur_yr]<-alpha_est*Fspin_prod_mod_proc_fuels_mod_proc[,prev_yr]+beta_est*(prod_preds[random_locs,34]+ rnorm(num_locs,0,proc_err)) + rnorm(num_locs,0,sig_pout[iter])
-      Fspin_prod_mod_proc_fuels_mod_par[,cur_yr]<-alphaout[iter]*Fspin_prod_mod_proc_fuels_mod_par[,prev_yr]+betaout[iter]*(prod_preds[random_locs,34]+ rnorm(num_locs,0,proc_err))
-      Fspin_prod_mod_par_fuels_mod_par[,cur_yr]<-alphaout[iter]*Fspin_prod_mod_par_fuels_mod_par[,prev_yr]+betaout[iter]*(prod_preds[random_locs,34] +rnorm(num_locs,0,param_err))
-      Fspin_prod_mod_par_fuels_mod_proc[,cur_yr]<-alpha_est*Fspin_prod_mod_par_fuels_mod_proc[,prev_yr]+beta_est*(prod_preds[random_locs,34] +rnorm(num_locs,0,param_err)) + rnorm(num_locs,0,sig_pout[iter])
+      Fspin_prod_mod[,cur_yr]<-alpha_est*Fspin_prod_mod[,prev_yr]+beta_est*(prod_preds[,34]+ rnorm(num_locs,0,proc_err) +rnorm(num_locs,0,param_err))
+      Fspin_fuels_mod[,cur_yr]<-alphaout[iter]*Fspin_fuels_mod[,prev_yr]+betaout[iter]*prod_preds[,34]  + rnorm(num_locs,0,sig_pout[iter])
+      Fspin_prod_mod_proc_fuels_mod_proc[,cur_yr]<-alpha_est*Fspin_prod_mod_proc_fuels_mod_proc[,prev_yr]+beta_est*(prod_preds[,34]+ rnorm(num_locs,0,proc_err)) + rnorm(num_locs,0,sig_pout[iter])
+      Fspin_prod_mod_proc_fuels_mod_par[,cur_yr]<-alphaout[iter]*Fspin_prod_mod_proc_fuels_mod_par[,prev_yr]+betaout[iter]*(prod_preds[,34]+ rnorm(num_locs,0,proc_err))
+      Fspin_prod_mod_par_fuels_mod_par[,cur_yr]<-alphaout[iter]*Fspin_prod_mod_par_fuels_mod_par[,prev_yr]+betaout[iter]*(prod_preds[,34] +rnorm(num_locs,0,param_err))
+      Fspin_prod_mod_par_fuels_mod_proc[,cur_yr]<-alpha_est*Fspin_prod_mod_par_fuels_mod_proc[,prev_yr]+beta_est*(prod_preds[,34] +rnorm(num_locs,0,param_err)) + rnorm(num_locs,0,sig_pout[iter])
      
       names(Fspin_all)[prev_yr]<-yr_name;names(Fspin_none)[prev_yr]<-yr_name;
       names(Fspin_prod_mod_proc)[prev_yr]<-yr_name;names(Fspin_prod_mod_par)[prev_yr]<-yr_name;
@@ -250,33 +243,34 @@ mean_prod_mod_par_fuels_mod_par<-apply(Fspin_2021_prod_mod_par_fuels_mod_par,2,m
 mean_prod_mod_par_fuels_mod_proc<-apply(Fspin_2021_prod_mod_par_fuels_mod_proc,2,mean,na.rm=2)
 
 
+## Figure
 
-par(mfrow=c(2,2))
+png("Fine_Fuels_Forecast/Figures/error_by_source.png",height=5.5,width=7.5,res=400,units="in")
 
-png("Fine_Fuels_Forecast/Figures/error_by_source.png")
-
+par(mfrow=c(2,2),mar=c(2,2,2,1),oma=c(2,2,1,0),mgp=c(2,0.5,0),tcl=-0.2)
 
 plot(density(mean_all), main="Fuels Model Process Uncertainty", 
-     ylim=c(0,15), xlab="Variances of forecasts", ylab="frequency")
+     ylim=c(0,91), xlab="", ylab="")
 polygon(density(mean_all), col=rgb(0,0,0,.2))
-polygon(density(mean_fuels_mod_proc),col=rgb(0,1,0,.2))
-# polygon(density(mean_fuels_mod_proc),fill=rgb(0,1,0,.2))
+polygon(density(mean_fuels_mod_proc),col=rgb(1,0,0.1,.2),border=rgb(1,0,0.1))
 
 plot(density(mean_all), main="Productivity Model Process Uncertainty", 
-     ylim=c(0,15), xlab="Variances of forecasts", ylab="frequency")
+     ylim=c(0,91), xlab="", ylab="")
 polygon(density(mean_all), col=rgb(0,0,0,.2))
-polygon(density(mean_prod_mod_proc),col=rgb(0,0,1,.2))
+polygon(density(mean_prod_mod_proc),col=rgb(1,0,0.1,.2),border=rgb(1,0,0.1))
 
 plot(density(mean_all), main="Fuels Model Parameter Uncertainty", 
-     ylim=c(0,15), xlab="Variances of forecasts", ylab="frequency")
+     ylim=c(0,91), xlab="", ylab="")
 polygon(density(mean_all), col=rgb(0,0,0,.2))
-polygon(density(mean_fuels_mod_par),col=rgb(1,0,0,1))
-
+polygon(density(mean_fuels_mod_par),col=rgb(1,0,0.1,0.2),border=rgb(1,0,0.1))
 
 plot(density(mean_all), main="Productivity Model Parameter Uncertainty", 
-     ylim=c(0,115), xlab="Variances of forecasts", ylab="frequency")
+     ylim=c(0,91), xlab="", ylab="")
 polygon(density(mean_all), col=rgb(0,0,0,.2))
-polygon(density(mean_prod_mod_par),col=rgb(1,0,0,.2), border="purple")
+polygon(density(mean_prod_mod_par),col=rgb(1,0,0.1,.2),border=rgb(1,0,0.1))
+
+mtext("Fuels forecast (2021)",1,outer=T,line=1,cex=1.1)
+mtext("Frequency",2,outer=T,line=1,cex=1.1)
 
 dev.off()
 
@@ -293,26 +287,26 @@ dev.off()
 #        ), pch=15)
 # 
 
-#show plot
-par(mfrow=c(2,2))
-plot(density(mean_all), main="Fuels Model Process Uncertainty", 
-     ylim=c(0,25), xlab="", ylab="Frequency", cex.lab=1.5)
-polygon(density(mean_all), col=rgb(0,0,0,.2))
-polygon(density(mean_fuels_mod_proc),col=rgb(0,1,0,.2))
-# polygon(density(mean_fuels_mod_proc),fill=rgb(0,1,0,.2))
-
-plot(density(mean_all), main="Productivity Model Process Uncertainty", 
-     ylim=c(0,25), xlab="", ylab="")
-polygon(density(mean_all), col=rgb(0,0,0,.2))
-polygon(density(mean_prod_mod_proc),col=rgb(0,0,1,.2))
-
-plot(density(mean_all), main="Fuels Model Parameter Uncertainty", 
-     ylim=c(0,25), xlab="Variances of forecasts", ylab="Frequency", cex.lab=1.5)
-polygon(density(mean_all), col=rgb(0,0,0,.2))
-polygon(density(mean_fuels_mod_par),col=rgb(1,0,0,1))
-
-
-plot(density(mean_all), main="Productivity Model Parameter Uncertainty", 
-     ylim=c(0,25), xlab="Variances of forecasts", ylab="", cex.lab=1.5, cex.main=1)
-polygon(density(mean_all), col=rgb(0,0,0,.2))
-polygon(density(mean_prod_mod_par),col=rgb(1,0,0,.2), border="purple")
+# #show plot
+# par(mfrow=c(2,2))
+# plot(density(mean_all), main="Fuels Model Process Uncertainty", 
+#      ylim=c(0,25), xlab="", ylab="Frequency", cex.lab=1.5)
+# polygon(density(mean_all), col=rgb(0,0,0,.2))
+# polygon(density(mean_fuels_mod_proc),col=rgb(0,1,0,.2))
+# # polygon(density(mean_fuels_mod_proc),fill=rgb(0,1,0,.2))
+# 
+# plot(density(mean_all), main="Productivity Model Process Uncertainty", 
+#      ylim=c(0,25), xlab="", ylab="")
+# polygon(density(mean_all), col=rgb(0,0,0,.2))
+# polygon(density(mean_prod_mod_proc),col=rgb(0,0,1,.2))
+# 
+# plot(density(mean_all), main="Fuels Model Parameter Uncertainty", 
+#      ylim=c(0,25), xlab="Variances of forecasts", ylab="Frequency", cex.lab=1.5)
+# polygon(density(mean_all), col=rgb(0,0,0,.2))
+# polygon(density(mean_fuels_mod_par),col=rgb(1,0,0,1))
+# 
+# 
+# plot(density(mean_all), main="Productivity Model Parameter Uncertainty", 
+#      ylim=c(0,25), xlab="Variances of forecasts", ylab="", cex.lab=1.5, cex.main=1)
+# polygon(density(mean_all), col=rgb(0,0,0,.2))
+# polygon(density(mean_prod_mod_par),col=rgb(1,0,0,.2), border="purple")

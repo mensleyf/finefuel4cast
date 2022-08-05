@@ -1,0 +1,75 @@
+
+
+ data{
+    int<lower=0> nLocs;
+    int<lower=0> nYears; 
+    int<lower=0> nMiss; 
+    int<lower=0> nOutputs; 
+    vector[nLocs] P0; 
+    vector[nOutputs] P;
+    int<lower=0> first_val_vec[nOutputs, 1 ] ; 
+    int<lower=0> S[nLocs, 1 ] ; 
+    int<lower=0> fuel_obs_index[nMiss, 2 ]; 
+    int<lower=0> prod_index[nMiss, 1]; 
+    matrix[nLocs, nYears ] O;
+  }
+
+
+parameters{
+  real alpha;
+  real beta;
+  real<lower=0> sig_p;
+  real<lower=0> sig_o;
+  vector[nOutputs] Fvec; 
+  }
+
+model {
+  // process model
+  for (x in 1:nOutputs){ 
+      int p_loc = 1;
+      if(first_val_vec[x,1]==1){
+         Fvec[x] ~ normal(P0[p_loc], .5);
+         p_loc=p_loc+1;
+       } else{
+         Fvec[x] ~ normal(alpha*(Fvec[x-1])+beta*P[x], sig_p);
+       }
+   }
+
+  //sampling model
+  for ( i in 1:nMiss){
+    O[fuel_obs_index[i,1],fuel_obs_index[i,2]]~normal( Fvec[prod_index[i,1]], sig_o/sqrt(S[fuel_obs_index[i,1],1]));
+  }
+  ///priors
+  beta~normal(.25,.25);
+  alpha~normal (.25,.25);
+  sig_o~normal(.5,.1)T[0,];
+  sig_p~normal(0, .25)T[0,];
+
+}
+
+
+generated quantities{
+  vector [nOutputs] Fvec_rep; 
+  matrix[nLocs, nYears ] O_rep;
+  matrix[nLocs, nYears ] O_data_out; 
+
+// process model
+  for (x in 1:nOutputs){ 
+      int p_loc = 1;
+      if(first_val_vec[x,1]==1){
+         // Fvec[x]<-0;
+         Fvec_rep[x] = normal_rng(P0[p_loc],.5);
+         p_loc=p_loc+1;
+       } else{
+         Fvec_rep[x] = normal_rng(alpha*(Fvec_rep[x-1])+beta*P[x], sig_p);
+       }
+   }
+
+  //sampling model
+  for ( i in 1:nMiss){
+    O_rep[fuel_obs_index[i,1],fuel_obs_index[i,2]] = normal_rng( Fvec_rep[prod_index[i,1]], sig_o/sqrt(S[fuel_obs_index[i,1],1]));
+    O_data_out[fuel_obs_index[i,1],fuel_obs_index[i,2]]=O[fuel_obs_index[i,1],fuel_obs_index[i,2]];
+  }
+}
+
+

@@ -18,6 +18,8 @@ priors_text<-c("alpha=N(.25,.25)",
                "sig_p=N(0,.25)",
                "sig_f=.8")
 
+par_labels <- c("alpha","beta","sigma[o]","sigma[p]")
+
 
 # ----------------------- data ----------------------
 
@@ -55,6 +57,11 @@ sig_f_vec<-seq(0.1,2,.1)
 
 
 var_list_str<-list("alpha_mu","alpha_sd", "beta_mu", "beta_sd","sig_o_mu","sig_o_sd", "sig_p_mu", "sig_p_sd", "sig_f")
+var_list_labels<-list("Prior(alpha,mean)","Prior(alpha,st.dev.)", 
+                      "Prior(beta,mean)", "Prior(beta,st.dev.)",
+                      "Prior(sigma[o],mean)","Prior(sigma[o],st.dev.)", 
+                      "Prior(sigma[p],mean)", "Prior(sigma[p],st.dev.)", 
+                      "Prior(sigma[f],mean)")
 var_list<-list(alpha_mu_vec,alpha_sd_vec, beta_mu_vec, beta_sd_vec,sig_o_mu_vec,sig_o_sd_vec, sig_p_mu_vec, sig_p_sd_vec, sig_f_vec)
 
 stan_list<-list()
@@ -81,6 +88,7 @@ for ( v in 1:9){
   cov_par<-vector(); cov_obs<-vector(); cov_proc<-vector(); cov_all<-vector()
   for ( i in 1:(length(var))){
     var_str<-var_list_str[[v]]
+    var_label <- var_list_labels[[v]]
     print(paste0( "model_outputs/", mod_name, "/", var_str, "/", var_str,"_", var[i], ".rds"))
     fit1<-readRDS(paste0("model_outputs/", mod_name, "/", var_str, "/", var_str,"_",  var[i], ".rds"))
     stan_list[[i]]<-fit1
@@ -123,14 +131,14 @@ for ( v in 1:9){
     }
   
   save_loc1<-paste0("Supplemental_Info_figs/prior_sensitivity_analysis_figs/", var_str, ".png")
-  png(save_loc1)
-  plotCI(x=var, y=alpha_vec, li=alpha_lo, ui=alpha_hi,main=var_str, ylim=c(-.5,1),pch=19, 
-       xlab= paste0(var_str, " (prior)"), ylab ="posteriors")
+  png(save_loc1,height=3.25,width=4,units="in",res=400)
+  par(tcl=-0.2,mgp=c(2,0.5,0),mar=c(3,4,1,1))
+  plotCI(x=var, y=alpha_vec, li=alpha_lo, ui=alpha_hi, ylim=c(-.5,1),pch=19, 
+       xlab= str2expression(var_label), ylab ="Posterior value")
   plotCI(x=var, y=beta_vec, li=beta_lo, ui=beta_hi, col="blue",pch=19, add=T)
   plotCI(x=var, y=sig_o_vec,li=sig_o_lo, ui=sig_o_hi, col="red",pch=19, add=T)
   plotCI(x=var, y=sig_p_vec, li=sig_p_lo, ui=sig_p_hi, col="chartreuse4",pch=19, add=T)
-  legend("bottomleft", title = "priors / init uncertainty", legend=priors_text, pch=c(19,19,19,19,15), col=c("black", "blue", "red", "chartreuse4", "gray"))
-  # text(x=var, y=max(c(sig_o_rhat,sig_p_rhat)), div_trans_vec, col="darkgreen")
+  legend("bottomleft", legend=str2expression(par_labels), pch=c(19,19,19,19), col=c("black", "blue", "red", "chartreuse4"),bty="n")
   dev.off()
   
   save_loc2<-paste0("Supplemental_Info_figs/prior_sensitivity_analysis_figs/", var_str, "_diagnostics.png")

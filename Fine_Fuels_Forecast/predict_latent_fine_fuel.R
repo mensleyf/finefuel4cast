@@ -3,12 +3,12 @@
 #---------- loading pcks, data, model-------------
 
 if (!require("pacman")) install.packages("pacman"); library(pacman)
-p_load(rstan,dplyr,tidyr,shinystan,here,rstudioapi,readtext, plotrix,RColorBrewer,rgdal, raster, install = TRUE, update = getOption("pac_update"), character.only = FALSE)
+p_load(rstan,dplyr,tidyr,data.table,shinystan,here,rstudioapi,readtext, plotrix,RColorBrewer,rgdal, raster, install = TRUE, update = getOption("pac_update"), character.only = FALSE)
 
 ##--------- extracting information from Prod_Forecast model ------------------
 
 #fitted model
-forecast_rds<-readRDS( "Prod_Forecast_model/prod_model_outputs/march_forecast_lm.rds")
+forecast_rds<-readRDS("Prod_Forecast_model/prod_model_outputs/march_forecast.rds")
 forecast_mod<-forecast_rds$mod_fit
 proc_err<-summary(forecast_mod)$sigma
 
@@ -16,15 +16,23 @@ proc_err<-summary(forecast_mod)$sigma
 prod_data<-as.data.frame(forecast_rds$agb_m)
 names(prod_data)<-seq(1987,2020)
 
-#forecasted/hindcasted data 1988-2021
-prod_preds<-read.csv("Prod_Forecast_model/prod_model_outputs/forecast2021/prod_cast_1988_2021.csv")
-names(prod_preds)<-seq(1988,2021,1)
+#forecasted data 1987-2020
+prod_preds <- as.data.frame(forecast_rds$prod_mean)
+names(prod_preds)<-as.character(seq(1987,2020,1))
+prod_preds <- prod_preds[,-1] #drop 1987
+# add 2021 forecast
+# START HERE
+tmp<-read.csv("Prod_Forecast_model/prod_model_outputs/forecast2021/march_forecast_point_est_2021.csv",header=T)
+prod_preds <- cbind(prod_preds,tmp)
+names(prod_preds)[ncol(prod_preds)] <- "2021"
 
-(nLocs<-nrow(prod_preds))
+nLocs<-nrow(prod_preds)
 
 # param uncertainty from monte carlo sampling 
-march_forecast_param<-read.csv("Prod_Forecast_model/prod_model_outputs/forecast2021/march_forecast_param_2021.csv")
-(param_err<-mean(apply(march_forecast_param,2,sd), na.rm=T))
+march_forecast_param<-data.table::fread(file="Prod_Forecast_model/prod_model_outputs/forecast2021/march_forecast_param_2021.csv",header=T)
+march_forecast_param <- as.data.frame(march_forecast_param)
+
+param_err<-mean(apply(march_forecast_param,1,sd), na.rm=T)
 
 
 # -------------- extracting information from Fuels Model ----------------
@@ -71,17 +79,16 @@ length(seq(1998,2021,1))
 prod_data_subset<-prod_data[,prod_start_yr:(prod_start_yr+10)] #1987:1997
 prod_preds_subset<-prod_preds[,latent_forecast_yr] #1998
 
+#check
 (prod_data_subset[1:5,]) #1987-1997
 (prod_preds[1:5,]) #1998
 (prod_preds_subset[1:5]) #1998
 
+# loop over sampling iteractions
 i<-1
 count=1
 
-#subset forecasted data to 1 year
-#subset prod_data to 10 years
-
-for ( i in 1:nIters){
+for (i in 1:nIters){
   count=1
   for (prod_start_yr in 1:24){
     latent_forecast_yr<-prod_start_yr+10 #starting at 1998
@@ -154,8 +161,8 @@ for ( i in 1:nIters){
 
 # View(Fspin_iters[(nLocs-30):(nLocs+30),])
 
-write.csv(Fspin_iters, "Fine_Fuels_Forecast/output_data/latent_forecast_distrib.csv", row.names=F)
-
+#write.csv(Fspin_iters, "Fine_Fuels_Forecast/output_data/latent_forecast_distrib.csv", row.names=F)
+data.table::fwrite(Fspin_iters,file="Fine_Fuels_Forecast/output_data/latent_forecast_distrib.csv",sep=",",row.names=F)
 
 ##---------------------------------- changing into smaller, more intuitive format --------------------
 
@@ -164,33 +171,23 @@ Fspin_iters_90<-matrix(NA,nrow=nLocs,ncol=24)
 Fspin_iters_10<-matrix(NA,nrow=nLocs,ncol=24)
 Fspin_iters_est<-matrix(NA,nrow=nLocs,ncol=24)
 
-
+# this chunk is slow (many minutes)
 for ( y in 1:24){
   cur_Fspin<-as.data.frame(Fspin_iters[((y-1)*nLocs+1):(y*nLocs),]) #just one year of locations, all iterations
   Fspin_iters_90[,y]<-apply(cur_Fspin,1,quantile, probs=.9,na.rm=T)
   Fspin_iters_10[,y]<-apply(cur_Fspin,1,quantile, probs=.1,na.rm=T)
   Fspin_iters_est[,y]<-apply(cur_Fspin,1,mean,na.rm=T)
-  
 }
 
 dim(cur_Fspin) 
 dim(Fspin_iters_90)
 
-# backtransform: run first chunk of march_all_lmm_predictions_z.R
-model_df2<-read.csv("Prod_Forecast_model/gee_4cast_data/model_csvs/march_all_model_csv.csv")
-
-agb<-model_df2$agb
-agb_m<-matrix(NA,nrow=nLocs,ncol=34)
-
-for (i in 1:34){
-  agb_m[1:nLocs,i]<-agb[(nLocs*(i-1)+1):(i*nLocs)]
-  # print(paste0((nLocs*(i-1)+1), " : " , (i*nLocs)))
-}
-
-agb_m[1:10,]
-long_term_sd<-apply(agb_m,1,sd, na.rm=T)
-long_term_mean<-apply(agb_m,1,mean)
-
+# backtransform: get location means and standard deviations
+tmp <- fread(file="Prod_Forecast_model/gee_4cast_data/model_csvs/march_all_model_csv.csv",header=T)
+tmp <- subset(tmp,year==1987)
+long_term_sd<-tmp$sd_agb
+long_term_mean<-tmp$mean_agb
+rm(tmp)
 
 Fspin_raw<-matrix(NA,nrow=nLocs,ncol=24); Fspin_90_raw<-matrix(NA,nrow=nLocs,ncol=24); Fspin_10_raw<-matrix(NA,nrow=nLocs,ncol=24)
 for ( i in 1:ncol(Fspin_iters_est)){
@@ -201,11 +198,10 @@ for ( i in 1:ncol(Fspin_iters_est)){
 
 # change to % above/below normal
 Fspin_perc<-matrix(NA,nrow=nLocs,ncol=24); Fspin_90_perc<-matrix(NA,nrow=nLocs,ncol=24); Fspin_10_perc<-matrix(NA,nrow=nLocs,ncol=24)
-
 for ( i in 1:ncol(Fspin_iters_est)){
-  Fspin_perc[,i]<-(Fspin_raw[,i]-model_df2$avg_agb[1:nLocs])/model_df2$avg_agb[1:nLocs]*100
-  Fspin_90_perc[,i]<-(Fspin_90_raw[,i]-model_df2$avg_agb[1:nLocs])/model_df2$avg_agb[1:nLocs]*100
-  Fspin_10_perc[,i]<-(Fspin_10_raw[,i]-model_df2$avg_agb[1:nLocs])/model_df2$avg_agb[1:nLocs]*100
+  Fspin_perc[,i]<-(Fspin_raw[,i]-long_term_mean)/long_term_mean*100
+  Fspin_90_perc[,i]<-(Fspin_90_raw[,i]-long_term_mean)/long_term_mean*100
+  Fspin_10_perc[,i]<-(Fspin_10_raw[,i]-long_term_mean)/long_term_mean*100
 }
 
 range(Fspin_perc, na.rm=T)
@@ -222,40 +218,26 @@ colMeans(Fspin_90_perc)
 # lines(x=seq(1998,2021), y=rep(0,24), lty=2)
 # legend("topright", legend= c("10% CI", "90% CI"), col="red", lty=2, lwd=2, cex=2)
 # 
-# ##by district::
-# loc_keeps<-read.csv("Prod_Forecast_model/prod_model_outputs/loc_keeps.csv")
-# names(loc_keeps)<-c("X","long", "lat", "year", "keeps")
-# loc_keeps<-subset(loc_keeps, loc_keeps$year==1987)
-# (loc_keeps[1:10,])
 
-district_coords<-read.csv("Fine_Fuels_forecast/district_coords.csv" )
+# join to BLM districts
+district_coords<-read.csv("Fine_Fuels_Forecast/output_data/district_coords.csv" )
+district_coords <- district_coords[,c("location","long","lat","PARENT_N")]
+district_coords <- merge(district_coords,forecast_rds$coord_df,all.y=T) 
+# a few NAs in PARENT_N, not every pixel mapped to a location, it's ok
 
 
-districts<-as.data.frame(district_coords)
-districts$long_lat<-paste0(substr(districts$long,1,7), "_", substr(districts$lat,1,7))
-coords<-as.data.frame(loc_keeps)
-coords$long_lat<-paste0(substr(coords$long,1,7), "_", substr(coords$lat,1,7))
-coords[1:10,]
-districts[1:10,]
+Fspin_iters_10_sp<-as.data.frame(cbind(Fspin_10_perc, district_coords))
+names(Fspin_iters_10_sp)<-c(paste0(rep("pred",24), seq(1998,2021)), names(district_coords))
+Fspin_iters_90_sp<-as.data.frame(cbind(Fspin_90_perc, district_coords))
+names(Fspin_iters_90_sp)<-c(paste0(rep("pred",24), seq(1998,2021)), names(district_coords))
+Fspin_iters_est_sp<-as.data.frame(cbind(Fspin_perc, district_coords))
+names(Fspin_iters_est_sp)<-c(paste0(rep("pred",24), seq(1998,2021)), names(district_coords))
 
-dim(coords); dim(districts)
-coords_dist<-plyr::join(coords, districts, by ="long_lat", type="left")
-dim(coords_dist)
-head(coords_dist)
-coords_dist$dupes<-duplicated(paste0(coords_dist$long, coords_dist$lat))
-coords_dist<-subset(coords_dist, coords_dist$dupes==F)
-dim(coords_dist)
-
-Fspin_iters_10_sp<-as.data.frame(cbind(Fspin_10_perc, coords_dist$long, coords_dist$lat, coords_dist$PARENT_N))
-names(Fspin_iters_10_sp)<-c(paste0(rep("pred",24), seq(1998,2021)), "long", "lat", "district")
-Fspin_iters_90_sp<-as.data.frame(cbind(Fspin_90_perc, coords_dist$long, coords_dist$lat, coords_dist$PARENT_N))
-names(Fspin_iters_90_sp)<-c(paste0(rep("pred",24), seq(1998,2021)), "long", "lat", "district")
-Fspin_iters_est_sp<-as.data.frame(cbind(Fspin_perc, coords_dist$long, coords_dist$lat, coords_dist$PARENT_N))
-names(Fspin_iters_est_sp)<-c(paste0(rep("pred",24), seq(1998,2021)), "long", "lat", "district")
-
-#this seems potentially useful too
+#save output
 latent_forecast_perc<-list(Fspin_iters_10_sp, Fspin_iters_90_sp,Fspin_iters_est_sp)
-# names(latent_forecast_perc)<-c("perc_above_avg_10CI", "perc_above_avg_10CI","perc_above_avg_10CI")
 names(latent_forecast_perc)<-c("CI10", "CI90", "mean")
-
 saveRDS(latent_forecast_perc, "Fine_Fuels_Forecast/output_data/latent_fuel_perc_sp.rds")
+
+# clean up everything (CAREFUL!)
+rm(list=ls())
+gc()
